@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>A Typical Greedy Snake Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<style>
+body {
+    margin: 0;
+    background: black;
+    color: white;
+    font-family: monospace;
+    text-align: center;
+}
+
+canvas {
+    border: 2px solid white;
+    display: block;
+    margin: 10px auto;
+    touch-action: none;
+}
+
+.stats {
+    display: flex;
+    justify-content: space-around;
+    max-width: 360px;
+    margin: auto;
+}
+
+.controls {
+    margin-top: 6px;
+}
+
+button {
+    background: #222;
+    color: white;
+    border: 2px solid white;
+    padding: 8px 14px;
+    font-family: monospace;
+    font-size: 14px;
+    margin: 4px;
+}
+
+#overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 10;
+}
+</style>
+</head>
+
+<body>
+<h2>A Typical Greedy Snake Game</h2>
+
+<div class="stats">
+    <div>Score: <span id="score">0</span></div>
+    <div>High: <span id="highScore">0</span></div>
+</div>
+
+<div class="controls">
+    <button onclick="toggleSound()">Sound: <span id="soundState">ON</span></button>
+</div>
+
+<canvas id="game" width="360" height="360"></canvas>
+
+<div id="overlay">
+    <h2>Game Over</h2>
+    <p>Final Score: <span id="finalScore"></span></p>
+    <button onclick="restartGame()">Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const grid = 20;
+const speed = 6;
+
+let count = 0;
+let score = 0;
+let gameOver = false;
+let soundEnabled = true;
+
+let highScore = localStorage.getItem("snakeHighScore") || 0;
+document.getElementById("highScore").textContent = highScore;
+
+// 🔊 Sounds
+const eatSound = new Audio("https://actions.google.com/sounds/v1/retro/coin_pickup.ogg");
+const deathSound = new Audio("https://actions.google.com/sounds/v1/retro/arcade_game_over.ogg");
+eatSound.preload = "auto";
+deathSound.preload = "auto";
+
+// Snake
+let snake = {
+    x: 160,
+    y: 160,
+    dx: grid,
+    dy: 0,
+    cells: [],
+    maxCells: 4
+};
+
+let food = { x: 200, y: 200 };
+
+// 🍏 Draw pixel apple
+function drawApple(x, y) {
+    ctx.fillStyle = "red";
+    ctx.fillRect(x+3, y+5, 14, 12);
+    ctx.fillStyle = "green";
+    ctx.fillRect(x+9, y+2, 2, 4);
+}
+
+// 🧱 Background tiles
+function drawBackground() {
+    for (let y = 0; y < canvas.height; y += grid) {
+        for (let x = 0; x < canvas.width; x += grid) {
+            ctx.fillStyle = ((x + y) / grid) % 2 === 0 ? "#111" : "#161616";
+            ctx.fillRect(x, y, grid, grid);
+        }
+    }
+}
+
+function randomFood() {
+    food.x = Math.floor(Math.random() * (canvas.width / grid)) * grid;
+    food.y = Math.floor(Math.random() * (canvas.height / grid)) * grid;
+}
+
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    document.getElementById("soundState").textContent = soundEnabled ? "ON" : "OFF";
+}
+
+function endGame() {
+    gameOver = true;
+    if (soundEnabled) {
+        deathSound.currentTime = 0;
+        deathSound.play();
+    }
+    document.getElementById("finalScore").textContent = score;
+    document.getElementById("overlay").style.display = "flex";
+}
+
+function restartGame() {
+    score = 0;
+    gameOver = false;
+    snake.x = 160;
+    snake.y = 160;
+    snake.cells = [];
+    snake.maxCells = 4;
+    snake.dx = grid;
+    snake.dy = 0;
+    document.getElementById("score").textContent = score;
+    document.getElementById("overlay").style.display = "none";
+}
+
+// Keyboard
+document.addEventListener("keydown", e => {
+    if ((e.key === "ArrowLeft" || e.key === "a") && snake.dx === 0) {
+        snake.dx = -grid; snake.dy = 0;
+    }
+    if ((e.key === "ArrowUp" || e.key === "w") && snake.dy === 0) {
+        snake.dx = 0; snake.dy = -grid;
+    }
+    if ((e.key === "ArrowRight" || e.key === "d") && snake.dx === 0) {
+        snake.dx = grid; snake.dy = 0;
+    }
+    if ((e.key === "ArrowDown" || e.key === "s") && snake.dy === 0) {
+        snake.dx = 0; snake.dy = grid;
+    }
+});
+
+// Mobile swipe
+let touchStartX = 0;
+let touchStartY = 0;
+
+canvas.addEventListener("touchstart", e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+});
+
+canvas.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0 && snake.dx === 0) snake.dx = grid, snake.dy = 0;
+        if (dx < 0 && snake.dx === 0) snake.dx = -grid, snake.dy = 0;
+    } else {
+        if (dy > 0 && snake.dy === 0) snake.dx = 0, snake.dy = grid;
+        if (dy < 0 && snake.dy === 0) snake.dx = 0, snake.dy = -grid;
+    }
+});
+
+function loop() {
+    requestAnimationFrame(loop);
+    if (gameOver) return;
+
+    if (++count < speed) return;
+    count = 0;
+
+    drawBackground();
+
+    snake.x += snake.dx;
+    snake.y += snake.dy;
+
+    if (snake.x < 0) snake.x = canvas.width - grid;
+    if (snake.x >= canvas.width) snake.x = 0;
+    if (snake.y < 0) snake.y = canvas.height - grid;
+    if (snake.y >= canvas.height) snake.y = 0;
+
+    snake.cells.unshift({x: snake.x, y: snake.y});
+    if (snake.cells.length > snake.maxCells) snake.cells.pop();
+
+    drawApple(food.x, food.y);
+
+    snake.cells.forEach((cell, index) => {
+        ctx.fillStyle = index === 0 ? "#00ff88" : "lime";
+        ctx.fillRect(cell.x, cell.y, grid-1, grid-1);
+
+        // 👀 Eyes
+        if (index === 0) {
+            ctx.fillStyle = "black";
+            ctx.fillRect(cell.x + 4, cell.y + 5, 3, 3);
+            ctx.fillRect(cell.x + 12, cell.y + 5, 3, 3);
+        }
+
+        if (cell.x === food.x && cell.y === food.y) {
+            snake.maxCells++;
+            score++;
+            if (soundEnabled) {
+                eatSound.currentTime = 0;
+                eatSound.play();
+            }
+
+            document.getElementById("score").textContent = score;
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem("snakeHighScore", highScore);
+                document.getElementById("highScore").textContent = highScore;
+            }
+
+            randomFood();
+        }
+
+        for (let i = index + 1; i < snake.cells.length; i++) {
+            if (cell.x === snake.cells[i].x && cell.y === snake.cells[i].y) {
+                endGame();
+            }
+        }
+    });
+}
+
+randomFood();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
